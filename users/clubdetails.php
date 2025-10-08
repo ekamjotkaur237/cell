@@ -4,33 +4,29 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 require_once('./lib/header.php');
+
 if (!isset($_GET['club_id']) || !is_numeric($_GET['club_id'])) {
-    echo '<div class="alert alert-danger">Invalid club ID.</div>';
-    require_once('./lib/footer.php');
+    header("Location: index.php?error=invalid_club");
     exit();
 }
 $club_id = intval($_GET['club_id']);
-// Handle apply POST before any output or queries
+// Handle session and user validation before any output
 if (!isset($_SESSION['user_id'])) {
-    // Try to fetch user_id from username
     if (isset($_SESSION['username'])) {
         $username = $conn->real_escape_string($_SESSION['username']);
         $result = $conn->query("SELECT id FROM users WHERE username = '$username'");
         if ($row = $result->fetch_assoc()) {
             $_SESSION['user_id'] = $row['id'];
         } else {
-            echo '<div class="alert alert-danger">User not found in database.</div>';
-            require_once('./lib/footer.php');
+            header("Location: index.php?error=user_not_found");
             exit();
         }
     } else {
-        echo '<div class="alert alert-danger">User ID and username not set in session.</div>';
-        require_once('./lib/footer.php');
+        header("Location: index.php?error=session_invalid");
         exit();
     }
 }
 $user_id = $_SESSION['user_id'];
-echo '<!-- Debug: user_id=' . htmlspecialchars($user_id) . ' -->';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_vacancy_id'])) {
     $vacancy_id = intval($_POST['apply_vacancy_id']);
     $check = $conn->query("SELECT * FROM applicants WHERE applicant = $user_id AND vacancy = $vacancy_id");
@@ -46,9 +42,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_vacancy_id'])) 
 
 $club = $conn->query("SELECT * FROM cells WHERE id = $club_id")->fetch_assoc();
 if (!$club) {
-    echo '<div class="alert alert-danger">Club not found.</div>';
-    require_once('./lib/footer.php');
+    header("Location: index.php?error=club_not_found");
     exit();
+}
+
+// Handle vote submission before any output
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vote_app_id'])) {
+    $vote_app_id = intval($_POST['vote_app_id']);
+    $vote_vacancy_id = intval($_POST['vote_vacancy_id']);
+    // Prevent duplicate vote for this role in this club
+    $vote_check = $conn->query("SELECT * FROM votes WHERE voter = $user_id AND applicant IN (SELECT id FROM applicants WHERE vacancy = $vote_vacancy_id)");
+    if ($vote_check->num_rows == 0) {
+        $conn->query("INSERT INTO votes (voter, applicant) VALUES ($user_id, $vote_app_id)");
+        header("Location: clubdetails.php?club_id=$club_id&voted=1");
+        exit();
+    } else {
+        header("Location: clubdetails.php?club_id=$club_id&alreadyvoted=1");
+        exit();
+    }
+}
+
+// Fetch all needed data before any output
+$roles_res = null;
+$applicants_by_role = [];
+if ($club['stat'] == 'VOTING STARTED') {
+    // Fetch all roles for this club
+    $roles_res = $conn->query("SELECT DISTINCT role, id FROM vacancies WHERE cells = $club_id");
+    $roles = [];
+    while ($row = $roles_res->fetch_assoc()) {
+        $roles[] = $row;
+    }
+    // Fetch all accepted applicants for this club, grouped by vacancy (role)
+    $applicants_res = $conn->query("SELECT a.id as app_id, u.username, v.role, v.id as vacancy_id FROM applicants a JOIN users u ON a.applicant = u.id JOIN vacancies v ON a.vacancy = v.id WHERE v.cells = $club_id AND a.stat = 'ACCEPT'");
+    while ($row = $applicants_res->fetch_assoc()) {
+        $applicants_by_role[$row['vacancy_id']]['role'] = $row['role'];
+        $applicants_by_role[$row['vacancy_id']]['candidates'][] = $row;
+    }
 }
 
 // Prepare winner results if voting ended
@@ -181,34 +210,7 @@ if ($club['stat'] === 'NO ACTION') {
                 <div class="card-header bg-success text-white">Vote for Candidates</div>
                 <div class="card-body">
                     <?php
-                    // Fetch all roles for this club
-                    $roles_res = $conn->query("SELECT DISTINCT role, id FROM vacancies WHERE cells = $club_id");
-                    $roles = [];
-                    while ($row = $roles_res->fetch_assoc()) {
-                        $roles[] = $row;
-                    }
-                    // Fetch all accepted applicants for this club, grouped by vacancy (role)
-                    $applicants_res = $conn->query("SELECT a.id as app_id, u.username, v.role, v.id as vacancy_id FROM applicants a JOIN users u ON a.applicant = u.id JOIN vacancies v ON a.vacancy = v.id WHERE v.cells = $club_id AND a.stat = 'ACCEPT'");
-                    $applicants_by_role = [];
-                    while ($row = $applicants_res->fetch_assoc()) {
-                        $applicants_by_role[$row['vacancy_id']]['role'] = $row['role'];
-                        $applicants_by_role[$row['vacancy_id']]['candidates'][] = $row;
-                    }
-                    // Handle vote POST
-                    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vote_app_id'])) {
-                        $vote_app_id = intval($_POST['vote_app_id']);
-                        $vote_vacancy_id = intval($_POST['vote_vacancy_id']);
-                        // Prevent duplicate vote for this role in this club
-                        $vote_check = $conn->query("SELECT * FROM votes WHERE voter = $user_id AND applicant IN (SELECT id FROM applicants WHERE vacancy = $vote_vacancy_id)");
-                        if ($vote_check->num_rows == 0) {
-                            $conn->query("INSERT INTO votes (voter, applicant) VALUES ($user_id, $vote_app_id)");
-                            header("Location: clubdetails.php?club_id=$club_id&voted=1");
-                            exit();
-                        } else {
-                            header("Location: clubdetails.php?club_id=$club_id&alreadyvoted=1");
-                            exit();
-                        }
-                    }
+                    // Data has been fetched before any output
                     ?>
                     <?php if (isset($_GET['voted'])): ?>
                         <div class="alert alert-success">Your vote has been submitted!</div>
