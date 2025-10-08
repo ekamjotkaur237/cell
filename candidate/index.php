@@ -1,8 +1,13 @@
 
 <?php
-require_once('./lib/header.php');
+require_once('./lib/index_header.php');
 // Fetch all clubs
-$clubs = $conn->query("SELECT * FROM cells");
+$clubs = $conn->query("SELECT * FROM cells ORDER BY id DESC");
+
+// Handle errors
+if (!$clubs) {
+    die("Error fetching clubs: " . $conn->error);
+}
 ?>
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
@@ -10,18 +15,26 @@ $clubs = $conn->query("SELECT * FROM cells");
 </div>
 
 <div class="row">
-    <?php while($club = $clubs->fetch_assoc()): ?>
-        <div class="col-md-4 mb-4">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body d-flex flex-column">
-                    <h5 class="card-title"><?php echo htmlspecialchars($club['title']); ?></h5>
-                    <p class="card-text mb-2"><strong>Description:</strong> <?php echo htmlspecialchars($club['description']); ?></p>
-                    <p class="card-text">Status: <span class="badge bg-secondary"><?php echo htmlspecialchars($club['stat']); ?></span></p>
-                    <a href="clubdetails.php?club_id=<?php echo $club['id']; ?>" class="btn btn-primary mt-auto">View Details</a>
+    <?php if ($clubs->num_rows > 0): ?>
+        <?php while($club = $clubs->fetch_assoc()): ?>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title"><?php echo htmlspecialchars($club['title']); ?></h5>
+                        <p class="card-text mb-2"><strong>Description:</strong> <?php echo htmlspecialchars($club['description']); ?></p>
+                        <p class="card-text">Status: <span class="badge bg-<?php echo ($club['stat'] == 'APPLICANT INVITED') ? 'success' : 'secondary'; ?>"><?php echo htmlspecialchars($club['stat']); ?></span></p>
+                        <a href="clubdetails.php?club_id=<?php echo $club['id']; ?>" class="btn btn-primary mt-auto">View Details</a>
+                    </div>
                 </div>
             </div>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <div class="col-12">
+            <div class="alert alert-info">
+                No clubs available at the moment.
+            </div>
         </div>
-    <?php endwhile; ?>
+    <?php endif; ?>
 </div>
 
 

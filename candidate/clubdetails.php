@@ -3,7 +3,7 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
-require_once('./lib/header.php');
+require_once('./lib/clubdetails_header.php');
 
 // Handle vote submission before any output
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['vote_app_id'])) {

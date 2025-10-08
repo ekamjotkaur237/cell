@@ -1,33 +1,45 @@
 <?php
 require_once('./lib/config.php');
 session_start();
-$_SESSION['username'] = '';
 
+// Clear session only if it's a fresh login page request
+if (!isset($_POST['username']) && !isset($_POST['password'])) {
+    session_unset();
+    session_destroy();
+    session_start();
+}
+
+$error_message = '';
 if (isset($_POST['username']) && isset($_POST['password'])) {
-    $username = $_POST['username'];
-    $password = $_POST['password'];
+    $username = mysqli_real_escape_string($conn, $_POST['username']);
+    $password = mysqli_real_escape_string($conn, $_POST['password']);
     $sql = "SELECT * FROM users WHERE username = '$username' AND pass = '$password'";
     $result = mysqli_query($conn, $sql);
+    
     if (!$result) {
-        die("Query failed: " . mysqli_error($conn));
+        $error_message = "System error. Please try again later.";
+    } else if (mysqli_num_rows($result) == 0) {
+        $error_message = "Invalid Credentials";
     } else {
-        while ($row = mysqli_fetch_assoc($result)) {
-            // echo "User ID: " . $row['id'] . " - Name: " . $row['username'] . "<br>";
-            if ($row["username"] == $username) {
-                $_SESSION["username"] = $row["username"];
-                $role = $row["role"];
-                if($role == "ADMIN"){
-                    header("Location: admin/index.php");
-                }
-                else if($role == "CANDIDATE"){
-                    header("Location: candidate/index.php");
-                }
-                else{
-                    header("Location: users/index.php");
-                }
-            } else {
-                echo "Invalid username or password.";
-            }
+        $row = mysqli_fetch_assoc($result);
+        $_SESSION["username"] = $row["username"];
+        $_SESSION["user_id"] = $row["id"];
+        $role = strtoupper($row["role"]);
+        
+        switch ($role) {
+            case 'ADMIN':
+                header("Location: admin/index.php");
+                exit();
+            case 'CANDIDATE':
+                header("Location: candidate/index.php");
+                exit();
+            case 'USER':
+                header("Location: users/index.php");
+                exit();
+            default:
+                $error_message = "Invalid user role";
+                session_unset();
+                session_destroy();
         }
     }
 }
@@ -65,6 +77,11 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
     <div class="card login-card p-4">
         <div class="card-body">
             <h3 class="text-center mb-4">Login</h3>
+            <?php if (!empty($error_message)): ?>
+                <div class="alert alert-danger" role="alert">
+                    <?php echo htmlspecialchars($error_message); ?>
+                </div>
+            <?php endif; ?>
             <form method="POST">
                 <div class="mb-3">
                     <label for="email" class="form-label">Username</label>
